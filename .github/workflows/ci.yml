@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create logs dir (host)
+        run: mkdir -p logs
+
+      
+      # -f pour la build (nom de l'image car ce n'est pas Dockerfile.yaml).
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t darshan-mpi:ci \
+            -f darshan_exp \
+            --build-arg DARSHAN_TAG=darshan-3.4.3 \
+            .
+
+      # Exécuter l'exemple MPI et produire un log Darshan monté dans ./logs
+      - name: Run MPI example to generate Darshan logs
+        run: |
+          docker run --rm \
+            -e DOCKER_JOBID=ci-job \
+            -v "$PWD/logs":/tmp \
+            darshan-mpi:ci \
+            mpirun -np 4 ./my_mpi_io
+
+      # Parser pour vérifier que le log est lisible
+      - name: Parse Darshan logs (sanity check)
+        run: |
+          ls -l logs || true
+          LOG_FILE=$(ls -1 logs/*.darshan | head -n1)
+          if [ -n "$LOG_FILE" ]; then
+            docker run --rm \
+              -v "$PWD/logs":/tmp \
+              darshan-mpi:ci \
+              sh -lc "darshan-parser /tmp/$(basename "$LOG_FILE") | head -n 50"
+          else
+            echo "No darshan log found!" && exit 1
+          fi
+
+      # Générer le job summary HTML : nécessite gnuplot dans le conteneur.
+      - name: Generate job summary (HTML)
+        run: |
+          LOG_FILE=$(ls -1 logs/*.darshan | head -n1)
+          docker run --rm \
+            -v "$PWD/logs":/tmp \
+            darshan-mpi:ci \
+            sh -lc "apt-get update && apt-get install -y gnuplot && darshan-job-summary.pl /tmp/$(basename "$LOG_FILE")"
+
+      # Publier les logs & résumer en artefacts CI
+      - name: Upload artifacts (Darshan logs & summary)
+        uses: actions/upload-artifact@v4
+        with:
+          name: darshan-logs-and-summary
+          path: |
+            logs/*.darshan
+            logs/*_summary.html
+            logs/*.png
+          if-no-files-found: warn
