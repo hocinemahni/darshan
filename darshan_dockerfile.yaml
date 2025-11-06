@@ -42,7 +42,7 @@ RUN cd /opt/darshan/darshan-runtime && \
     make -j && \
     make install
 
-# 4) (Optionnel) Compiler et installer Darshan (utilitaires)
+# 4) Compiler et installer Darshan (utilitaires)
 #    aussi darshan-parser, darshan-job-summary.pl, etc.
 RUN cd /opt/darshan/darshan-util && \
     ./configure --prefix=/opt/darshan-install \
