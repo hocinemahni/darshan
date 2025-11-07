@@ -27,49 +27,50 @@ jobs:
             --build-arg DARSHAN_TAG=darshan-3.4.3 \
             .
 
-      # Run example, enable Darshan, and ensure date subfolders exist under /tmp
+      # Run example, enable Darshan via mpirun -x, ensure date subfolders exist
       - name: Run MPI example to generate Darshan logs
         run: |
           docker run --rm \
             -e DOCKER_JOBID=ci-job \
-            -e OMPI_ALLOW_RUN_AS_ROOT=1 \
-            -e OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
-            -e LD_PRELOAD="/usr/local/lib/libdarshan.so:/usr/local/lib/libdarshan-mpi-io.so:/usr/local/lib/libdarshan-posix.so" \
-            -e DARSHAN_LOGPATH=/tmp \
             -v "$PWD/logs":/tmp \
             darshan-mpi:ci \
-            sh -lc '
+            bash -lc '
               set -e
-              echo "[debug] darshan libs:" && ls -l /usr/local/lib | grep darshan || true
               # répertoire daté attendu par Darshan: /tmp/YYYY/M/D
-              DIR=/tmp/$(date +%Y/%-m/%-d) && mkdir -p "$DIR" && echo "[debug] created $DIR"
-              # exécuter l’exemple (oversubscribe corrige le manque de slots sur runner)
-              mpirun --allow-run-as-root --oversubscribe -np 2 ./my_mpi_io
-              echo "[debug] /tmp tree:" && ls -R /tmp || true
+              DIR=/tmp/$(date +%Y/%-m/%-d); mkdir -p "$DIR"; echo "[debug] created $DIR"
+              echo "[debug] darshan libs in /usr/local/lib:"; ls -1 /usr/local/lib/libdarshan* || true
+              # exécuter (oversubscribe pour runner CI; export explicite des variables aux rangs MPI)
+              mpirun --allow-run-as-root --oversubscribe -np ${NP:-2} \
+                -x LD_PRELOAD=/usr/local/lib/libdarshan.so:/usr/local/lib/libdarshan-mpi-io.so:/usr/local/lib/libdarshan-posix.so \
+                -x DARSHAN_LOGPATH=/tmp \
+                -x DOCKER_JOBID=ci-job \
+                ./my_mpi_io
+              echo "[debug] darshan files under /tmp:"
+              find /tmp -type f -name "*.darshan*" -print || true
             '
 
-      # Parse a produced log (accept .darshan and .darshan.gz; search in subfolders)
+      # Parse: find log recursively and pass path relative to /tmp into container
       - name: Parse Darshan logs (sanity check)
         run: |
           set -e
-          echo "Files in logs/:"
+          echo "Tree under logs/:"
           ls -R logs || true
           LOG_FILE=$(find logs -type f \( -name "*.darshan" -o -name "*.darshan.gz" \) | head -n1)
           if [ -z "$LOG_FILE" ]; then
             echo "No darshan log found!" && exit 1
           fi
-          echo "Parsing $LOG_FILE"
+          echo "Found log: $LOG_FILE"
+          REL="${LOG_FILE#logs/}"
           docker run --rm -v "$PWD/logs":/tmp darshan-mpi:ci \
-            sh -lc "darshan-parser /tmp/$(basename "$LOG_FILE") | head -n 50"
+            bash -lc "darshan-parser \"/tmp/${REL}\" | head -n 80"
 
-      # Generate HTML summary next to the log (gnuplot est déjà dans l'image)
+      # Generate HTML summary (gnuplot + TeX deps already in the image)
       - name: Generate job summary (HTML)
         run: |
           LOG_FILE=$(find logs -type f \( -name "*.darshan" -o -name "*.darshan.gz" \) | head -n1)
-          docker run --rm \
-            -v "$PWD/logs":/tmp \
-            darshan-mpi:ci \
-            sh -lc "darshan-job-summary.pl /tmp/$(basename "$LOG_FILE")"
+          REL="${LOG_FILE#logs/}"
+          docker run --rm -v "$PWD/logs":/tmp darshan-mpi:ci \
+            bash -lc "darshan-job-summary.pl \"/tmp/${REL}\""
 
       # Upload artifacts (logs + summary + plots)
       - name: Upload artifacts (Darshan logs & summary)
@@ -78,6 +79,6 @@ jobs:
           name: darshan-logs-and-summary
           path: |
             logs/**/*.darshan*
-            logs/*_summary.html
-            logs/*.png
+            logs/**/*_summary.html
+            logs/**/*.png
           if-no-files-found: warn
