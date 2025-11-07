@@ -40,12 +40,12 @@ jobs:
             darshan-mpi:ci \
             sh -lc '
               set -e
-              echo "[debug] darshan libs in image:" && ls -l /usr/local/lib | grep darshan || true
-              # create Darshan date-based directory (/tmp/YYYY/M/D)
+              echo "[debug] darshan libs:" && ls -l /usr/local/lib | grep darshan || true
+              # répertoire daté attendu par Darshan: /tmp/YYYY/M/D
               DIR=/tmp/$(date +%Y/%-m/%-d) && mkdir -p "$DIR" && echo "[debug] created $DIR"
-              # run MPI (oversubscribe to avoid slot issues on CI)
+              # exécuter l’exemple (oversubscribe corrige le manque de slots sur runner)
               mpirun --allow-run-as-root --oversubscribe -np 2 ./my_mpi_io
-              echo "[debug] /tmp content:" && ls -R /tmp || true
+              echo "[debug] /tmp tree:" && ls -R /tmp || true
             '
 
       # Parse a produced log (accept .darshan and .darshan.gz; search in subfolders)
@@ -62,14 +62,14 @@ jobs:
           docker run --rm -v "$PWD/logs":/tmp darshan-mpi:ci \
             sh -lc "darshan-parser /tmp/$(basename "$LOG_FILE") | head -n 50"
 
-      # Generate HTML summary next to the log (installs gnuplot inside the container)
+      # Generate HTML summary next to the log (gnuplot est déjà dans l'image)
       - name: Generate job summary (HTML)
         run: |
           LOG_FILE=$(find logs -type f \( -name "*.darshan" -o -name "*.darshan.gz" \) | head -n1)
           docker run --rm \
             -v "$PWD/logs":/tmp \
             darshan-mpi:ci \
-            sh -lc "apt-get update && apt-get install -y gnuplot && darshan-job-summary.pl /tmp/$(basename "$LOG_FILE")"
+            sh -lc "darshan-job-summary.pl /tmp/$(basename "$LOG_FILE")"
 
       # Upload artifacts (logs + summary + plots)
       - name: Upload artifacts (Darshan logs & summary)
