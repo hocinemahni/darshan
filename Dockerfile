@@ -39,18 +39,20 @@ RUN cd /opt/darshan/darshan-util && \
                 CFLAGS='-fPIC -O3' && \
     make -j && make install
 
-# 5) Environnement
+# 5) Rendre les bibliothèques Darshan visibles système-wide
+#    (évite les soucis de LD_PRELOAD avec mpirun)
+RUN cp /opt/darshan-install/lib/libdarshan* /usr/local/lib/ && \
+    ldconfig
+
+# 6) Environnement
 ENV PATH="/opt/darshan-install/bin:${PATH}"
 # le ":-" évite l’avertissement BuildKit si LD_LIBRARY_PATH est vide
 ENV LD_LIBRARY_PATH="/opt/darshan-install/lib:${LD_LIBRARY_PATH:-}"
 
-# Hack : copier les libs Darshan dans /usr/local/lib pour LD_PRELOAD
-RUN cp /opt/darshan-install/lib/libdarshan* /usr/local/lib/ && \
-    ldconfig
-# 6) Exemple MPI-IO
+# 7) Exemple MPI-IO
 COPY my_mpi_io.c /usr/local/src/
 WORKDIR /usr/local/src
 RUN mpicc my_mpi_io.c -o my_mpi_io
 
-# 7) Shell par défaut
+# 8) Shell par défaut
 CMD ["/bin/bash"]
