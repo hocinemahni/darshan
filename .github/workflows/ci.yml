@@ -16,9 +16,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Create logs dir (host)
+      - name: Create host logs dir
         run: mkdir -p logs
 
+      # Build image from Dockerfile at repo root
       - name: Build Docker image
         run: |
           docker build \
@@ -26,7 +27,7 @@ jobs:
             --build-arg DARSHAN_TAG=darshan-3.4.3 \
             .
 
-      # --- Run: activer Darshan via LD_PRELOAD (runtime + MPI-IO + POSIX)
+      # Run example, enable Darshan, and ensure date subfolders exist under /tmp
       - name: Run MPI example to generate Darshan logs
         run: |
           docker run --rm \
@@ -35,17 +36,25 @@ jobs:
             -e OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
             -e LD_PRELOAD="/opt/darshan-install/lib/libdarshan.so:/opt/darshan-install/lib/libdarshan-mpi-io.so:/opt/darshan-install/lib/libdarshan-posix.so" \
             -e DARSHAN_LOGPATH=/tmp \
-            -e DARSHAN_ENABLE_NONMPI=1 \
             -v "$PWD/logs":/tmp \
             darshan-mpi:ci \
-            sh -lc 'ls -l /opt/darshan-install/lib ; mpirun --allow-run-as-root --oversubscribe -np 2 ./my_mpi_io ; ls -l /tmp'
+            sh -lc '
+              set -e
+              echo "[debug] darshan libs in image:" && ls -l /opt/darshan-install/lib || true
+              # create Darshan date-based directory (/tmp/YYYY/M/D)
+              DIR=/tmp/$(date +%Y/%-m/%-d) && mkdir -p "$DIR" && echo "[debug] created $DIR"
+              # run MPI (oversubscribe to avoid slot issues on CI)
+              mpirun --allow-run-as-root --oversubscribe -np 2 ./my_mpi_io
+              echo "[debug] /tmp content:" && ls -R /tmp || true
+            '
 
+      # Parse a produced log (accept .darshan and .darshan.gz)
       - name: Parse Darshan logs (sanity check)
         run: |
           set -e
           echo "Files in logs/:"
           ls -l logs || true
-          LOG_FILE=$(find logs -maxdepth 1 -type f -name "*.darshan*" | head -n1)
+          LOG_FILE=$(find logs -maxdepth 3 -type f -name "*.darshan*" | head -n1)
           if [ -z "$LOG_FILE" ]; then
             echo "No darshan log found!" && exit 1
           fi
@@ -53,14 +62,16 @@ jobs:
           docker run --rm -v "$PWD/logs":/tmp darshan-mpi:ci \
             sh -lc "darshan-parser /tmp/$(basename "$LOG_FILE") | head -n 50"
 
+      # Generate HTML summary next to the log (installs gnuplot inside the container)
       - name: Generate job summary (HTML)
         run: |
-          LOG_FILE=$(find logs -maxdepth 1 -type f -name "*.darshan*" | head -n1)
+          LOG_FILE=$(find logs -maxdepth 3 -type f -name "*.darshan*" | head -n1)
           docker run --rm \
             -v "$PWD/logs":/tmp \
             darshan-mpi:ci \
             sh -lc "apt-get update && apt-get install -y gnuplot && darshan-job-summary.pl /tmp/$(basename "$LOG_FILE")"
 
+      # Upload artifacts (logs + summary + plots)
       - name: Upload artifacts (Darshan logs & summary)
         uses: actions/upload-artifact@v4
         with:
