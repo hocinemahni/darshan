@@ -59,7 +59,7 @@ ENV LD_LIBRARY_PATH="/opt/darshan-install/lib:${LD_LIBRARY_PATH}"
 # 6) Copie et compilation d'un exemple MPI
 COPY my_mpi_io.c /usr/local/src/
 WORKDIR /usr/local/src
-RUN mpicc my_mpi_io.c -o my_mpi_io
+RUN darshan-mpicc my_mpi_io.c -o my_mpi_io
 
 # 7) Commande par défaut : bash interactif
 CMD ["/bin/bash"]
