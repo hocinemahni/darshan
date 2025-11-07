@@ -34,13 +34,13 @@ jobs:
             -e DOCKER_JOBID=ci-job \
             -e OMPI_ALLOW_RUN_AS_ROOT=1 \
             -e OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
-            -e LD_PRELOAD="/opt/darshan-install/lib/libdarshan.so:/opt/darshan-install/lib/libdarshan-mpi-io.so:/opt/darshan-install/lib/libdarshan-posix.so" \
+            -e LD_PRELOAD="/usr/local/lib/libdarshan.so:/usr/local/lib/libdarshan-mpi-io.so:/usr/local/lib/libdarshan-posix.so" \
             -e DARSHAN_LOGPATH=/tmp \
             -v "$PWD/logs":/tmp \
             darshan-mpi:ci \
             sh -lc '
               set -e
-              echo "[debug] darshan libs in image:" && ls -l /opt/darshan-install/lib || true
+              echo "[debug] darshan libs in image:" && ls -l /usr/local/lib | grep darshan || true
               # create Darshan date-based directory (/tmp/YYYY/M/D)
               DIR=/tmp/$(date +%Y/%-m/%-d) && mkdir -p "$DIR" && echo "[debug] created $DIR"
               # run MPI (oversubscribe to avoid slot issues on CI)
@@ -48,13 +48,13 @@ jobs:
               echo "[debug] /tmp content:" && ls -R /tmp || true
             '
 
-      # Parse a produced log (accept .darshan and .darshan.gz)
+      # Parse a produced log (accept .darshan and .darshan.gz; search in subfolders)
       - name: Parse Darshan logs (sanity check)
         run: |
           set -e
           echo "Files in logs/:"
-          ls -l logs || true
-          LOG_FILE=$(find logs -maxdepth 3 -type f -name "*.darshan*" | head -n1)
+          ls -R logs || true
+          LOG_FILE=$(find logs -type f \( -name "*.darshan" -o -name "*.darshan.gz" \) | head -n1)
           if [ -z "$LOG_FILE" ]; then
             echo "No darshan log found!" && exit 1
           fi
@@ -65,7 +65,7 @@ jobs:
       # Generate HTML summary next to the log (installs gnuplot inside the container)
       - name: Generate job summary (HTML)
         run: |
-          LOG_FILE=$(find logs -maxdepth 3 -type f -name "*.darshan*" | head -n1)
+          LOG_FILE=$(find logs -type f \( -name "*.darshan" -o -name "*.darshan.gz" \) | head -n1)
           docker run --rm \
             -v "$PWD/logs":/tmp \
             darshan-mpi:ci \
@@ -77,7 +77,7 @@ jobs:
         with:
           name: darshan-logs-and-summary
           path: |
-            logs/*.darshan*
+            logs/**/*.darshan*
             logs/*_summary.html
             logs/*.png
           if-no-files-found: warn
