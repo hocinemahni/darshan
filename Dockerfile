@@ -1,19 +1,29 @@
 # ------------------------------------------------------------------------------
-# Dockerfile : Instrumentation d'une application MPI avec Darshan
+# Dockerfile : Instrumentation d'une application MPI avec Darshan (Ubuntu 22.04)
 # ------------------------------------------------------------------------------
 
 FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# 1) Paquets système + gnuplot (pour darshan-job-summary.pl)
+# 1) Paquets système + dépendances Darshan job-summary (gnuplot, Perl, TeX)
 RUN apt-get update -y && \
     apt-get install -y \
         git build-essential wget curl cmake \
         python3 python3-pip \
         openmpi-bin libopenmpi-dev \
         zlib1g-dev libbz2-dev libcurl4-openssl-dev bzip2 \
-        gnuplot && \
+        gnuplot \
+        perl \
+        libpod-simple-perl \
+        libcapture-tiny-perl \
+        libfile-which-perl \
+        libyaml-tiny-perl \
+        libconfig-tiny-perl \
+        texlive \
+        texlive-latex-base \
+        texlive-latex-recommended \
+        texlive-fonts-recommended && \
     rm -rf /var/lib/apt/lists/*
 
 # 2) Récupérer Darshan
@@ -40,7 +50,7 @@ RUN cd /opt/darshan/darshan-util && \
                 CFLAGS='-fPIC -O3' && \
     make -j && make install
 
-# 5) Rendre les bibliothèques Darshan visibles système-wide
+# 5) Rendre les bibliothèques Darshan visibles partout (LD_PRELOAD/mpirun)
 RUN cp /opt/darshan-install/lib/libdarshan* /usr/local/lib/ && \
     ldconfig
 
