@@ -1,27 +1,18 @@
 # ------------------------------------------------------------------------------
-# Dockerfile : Instrumentation d'une application MPI avec Darshan
+# Dockerfile : Instrumentation d'une application MPI avec Darshan (Ubuntu 22.04)
 # ------------------------------------------------------------------------------
 
 FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# 1) Installation des paquets nécessaires (MPI, Darshan deps, gnuplot, LaTeX, Perl, Ghostscript, etc.)
+# 1) Paquets système + dépendances Darshan job-summary (gnuplot, Perl, TeX, Ghostscript)
 RUN apt-get update -y && \
     apt-get install -y \
-        git \
-        build-essential \
-        wget \
-        curl \
-        cmake \
-        python3 \
-        python3-pip \
-        openmpi-bin \
-        libopenmpi-dev \
-        zlib1g-dev \
-        libbz2-dev \
-        libcurl4-openssl-dev \
-        bzip2 \
+        git build-essential wget curl cmake \
+        python3 python3-pip \
+        openmpi-bin libopenmpi-dev \
+        zlib1g-dev libbz2-dev libcurl4-openssl-dev bzip2 \
         gnuplot \
         ghostscript \
         texlive \
@@ -29,8 +20,7 @@ RUN apt-get update -y && \
         texlive-latex-base \
         texlive-latex-recommended \
         texlive-font-utils \
-        perl \
-        cpanminus \
+        perl cpanminus \
         libpod-simple-perl \
         libpod-markdown-perl \
         libcapture-tiny-perl \
@@ -40,14 +30,12 @@ RUN apt-get update -y && \
     cpanm Pod::Select && \
     rm -rf /var/lib/apt/lists/*
 
-# 2) Cloner le dépôt Darshan et se positionner sur le tag voulu
+# 2) Récupérer Darshan
 ARG DARSHAN_TAG=darshan-3.4.3
 RUN git clone https://github.com/darshan-hpc/darshan.git /opt/darshan && \
-    cd /opt/darshan && \
-    git checkout ${DARSHAN_TAG} && \
-    ./prepare.sh
+    cd /opt/darshan && git checkout "${DARSHAN_TAG}" && ./prepare.sh
 
-# 3) Compiler et installer Darshan (runtime)
+# 3) Compiler / installer Darshan (runtime)
 RUN cd /opt/darshan/darshan-runtime && \
     ./configure --prefix=/opt/darshan-install \
                 --with-mem-align=8 \
@@ -56,26 +44,25 @@ RUN cd /opt/darshan/darshan-runtime && \
                 --with-jobid-env=DOCKER_JOBID \
                 --disable-cuserid \
                 --disable-groupname && \
-    make -j && \
-    make install
+    make -j && make install
 
-# 4) Compiler et installer Darshan (utilitaires)
+# 4) Compiler / installer Darshan (utilitaires)
 RUN cd /opt/darshan/darshan-util && \
     ./configure --prefix=/opt/darshan-install \
                 --with-zlib \
                 --enable-shared \
                 CFLAGS='-fPIC -O3' && \
-    make -j && \
-    make install
+    make -j && make install
 
-# 5) Rendre visibles les bibliothèques Darshan au runtime
-RUN cp /opt/darshan-install/lib/libdarshan* /usr/local/lib/ && ldconfig
+# 5) Rendre les bibliothèques Darshan visibles système-wide (ld.so / LD_PRELOAD)
+RUN cp /opt/darshan-install/lib/libdarshan* /usr/local/lib/ && \
+    ldconfig
 
-# 6) Variables d'environnement Darshan
+# 6) Environnement
 ENV PATH="/opt/darshan-install/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/darshan-install/lib:${LD_LIBRARY_PATH:-}"
 
-# 7) Compilation du programme MPI d'exemple
+# 7) Exemple MPI-IO
 COPY my_mpi_io.c /usr/local/src/
 WORKDIR /usr/local/src
 RUN mpicc my_mpi_io.c -o my_mpi_io
