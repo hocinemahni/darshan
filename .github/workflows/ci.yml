@@ -21,12 +21,11 @@ jobs:
         run: mkdir -p logs
 
       
-      # -f pour la build (nom de l'image car ce n'est pas Dockerfile.yaml).
+      # build
       - name: Build Docker image
         run: |
           docker build \
             -t darshan-mpi:ci \
-            -f darshan_exp \
             --build-arg DARSHAN_TAG=darshan-3.4.3 \
             .
 
