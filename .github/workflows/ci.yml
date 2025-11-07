@@ -19,7 +19,6 @@ jobs:
       - name: Create logs dir (host)
         run: mkdir -p logs
 
-      # Build l'image depuis le Dockerfile à la racine
       - name: Build Docker image
         run: |
           docker build \
@@ -27,21 +26,20 @@ jobs:
             --build-arg DARSHAN_TAG=darshan-3.4.3 \
             .
 
-      # Exécute l'exemple MPI et génère des logs Darshan dans ./logs
+      # --- Run: activer Darshan via LD_PRELOAD (runtime + MPI-IO + POSIX)
       - name: Run MPI example to generate Darshan logs
         run: |
           docker run --rm \
             -e DOCKER_JOBID=ci-job \
             -e OMPI_ALLOW_RUN_AS_ROOT=1 \
             -e OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
-            -e LD_PRELOAD=/opt/darshan-install/lib/libdarshan.so \
+            -e LD_PRELOAD="/opt/darshan-install/lib/libdarshan.so:/opt/darshan-install/lib/libdarshan-mpi-io.so:/opt/darshan-install/lib/libdarshan-posix.so" \
             -e DARSHAN_LOGPATH=/tmp \
             -e DARSHAN_ENABLE_NONMPI=1 \
             -v "$PWD/logs":/tmp \
             darshan-mpi:ci \
-            sh -lc 'mpirun --allow-run-as-root --oversubscribe -np 2 ./my_mpi_io && ls -l /tmp'
+            sh -lc 'ls -l /opt/darshan-install/lib ; mpirun --allow-run-as-root --oversubscribe -np 2 ./my_mpi_io ; ls -l /tmp'
 
-      # Parse du log (supporte .darshan et .darshan.gz)
       - name: Parse Darshan logs (sanity check)
         run: |
           set -e
@@ -55,7 +53,6 @@ jobs:
           docker run --rm -v "$PWD/logs":/tmp darshan-mpi:ci \
             sh -lc "darshan-parser /tmp/$(basename "$LOG_FILE") | head -n 50"
 
-      # Génère le résumé HTML (installe gnuplot à la volée)
       - name: Generate job summary (HTML)
         run: |
           LOG_FILE=$(find logs -maxdepth 1 -type f -name "*.darshan*" | head -n1)
@@ -64,7 +61,6 @@ jobs:
             darshan-mpi:ci \
             sh -lc "apt-get update && apt-get install -y gnuplot && darshan-job-summary.pl /tmp/$(basename "$LOG_FILE")"
 
-      # Artefacts (logs + summary + images)
       - name: Upload artifacts (Darshan logs & summary)
         uses: actions/upload-artifact@v4
         with:
