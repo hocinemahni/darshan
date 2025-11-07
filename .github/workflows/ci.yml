@@ -36,7 +36,7 @@ jobs:
             -e DOCKER_JOBID=ci-job \
             -v "$PWD/logs":/tmp \
             darshan-mpi:ci \
-            mpirun -np 4 ./my_mpi_io
+            mpirun --allow-run-as-root --mca orte_allowed_exit_without_sync 1 -np 4 ./my_mpi_io
 
       # Parser pour vérifier que le log est lisible
       - name: Parse Darshan logs (sanity check)
