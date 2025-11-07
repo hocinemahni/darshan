@@ -6,13 +6,14 @@ FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# 1) Paquets
+# 1) Paquets système + gnuplot (pour darshan-job-summary.pl)
 RUN apt-get update -y && \
     apt-get install -y \
         git build-essential wget curl cmake \
         python3 python3-pip \
         openmpi-bin libopenmpi-dev \
-        zlib1g-dev libbz2-dev libcurl4-openssl-dev bzip2 && \
+        zlib1g-dev libbz2-dev libcurl4-openssl-dev bzip2 \
+        gnuplot && \
     rm -rf /var/lib/apt/lists/*
 
 # 2) Récupérer Darshan
@@ -40,7 +41,6 @@ RUN cd /opt/darshan/darshan-util && \
     make -j && make install
 
 # 5) Rendre les bibliothèques Darshan visibles système-wide
-#    (évite les soucis de LD_PRELOAD avec mpirun)
 RUN cp /opt/darshan-install/lib/libdarshan* /usr/local/lib/ && \
     ldconfig
 
